@@ -140,25 +140,25 @@ int waitcount;
 /////////////////////////////
 
 void setup() {
-  Serial.begin(250000);
-  
-  AudioMemory(60);
-  
-  sgtl5000.enable();
-  sgtl5000.inputSelect(AUDIO_INPUT_MIC);
-  // Set amplifier gain (in decibels, from 0 to 63)
-  sgtl5000.micGain(40);
-  // Just sets headphone jack volume
-  sgtl5000.volume(0.5);
-  
-  // Butterworth filter, 12 dB/octave, filters out unnecessary frequencies (trumpet mouthpiece range is 87Hz -> 932 Hz)
-  biquad1.setLowpass(0, 1000, 0.707);
+    Serial.begin(250000);
 
-  // begin reading audio data to detect volume (and velocity?)
-  queue1.begin();
-  
-  // Configure the FFT window algorithm to use
-  myFFT.windowFunction(AudioWindowHanning1024);
+    AudioMemory(60);
+
+    sgtl5000.enable();
+    sgtl5000.inputSelect(AUDIO_INPUT_MIC);
+    // Set amplifier gain (in decibels, from 0 to 63)
+    sgtl5000.micGain(40);
+    // Just sets headphone jack volume
+    sgtl5000.volume(0.5);
+
+    // Butterworth filter, 12 dB/octave, filters out unnecessary frequencies (trumpet mouthpiece range is 87Hz -> 932 Hz)
+    biquad1.setLowpass(0, 1000, 0.707);
+
+    // begin reading audio data to detect volume (and velocity?)
+    queue1.begin();
+
+    // Configure the FFT window algorithm to use
+    myFFT.windowFunction(AudioWindowHanning1024);
 
 }
 
@@ -167,89 +167,89 @@ void setup() {
 /////////////////////////////
 
 void loop() {
-  
-  ReadValves();
-  
-  // once new buffer fills, run it through fft
-  if (myFFT.available()) {
-    endcapture = false;
-    peakstart = false;
-    peakdetect = false;
-    // Initialize to a number that is unused. In CapturePeak() no note will sound if mindex does not change, and remains 512.
-    mindex = 512;
-    // initialize to zero for CapturePeak()
-    m = 0;
 
-    // Higher i means higher frequencies - I believe there are 26 bins
-    for (i = 0; i < 26; i++) {
-      // Include fft correction factor? You should research what the magnitude here represents. What are the units?
-      n = (float)myFFT.read(i); // 1.0 represents a full scale sine wave
-      
-      // send serial data to MATLAB
-      // Serial.print(n);
-      // Serial.print(" ");
-      
-      // Returns a number (mindex) representing fundamental frequency
-      CapturePeak();
+    ReadValves();
+
+    // once new buffer fills, run it through fft
+    if (myFFT.available()) {
+        endcapture = false;
+        peakstart = false;
+        peakdetect = false;
+        // Initialize to a number that is unused. In CapturePeak() no note will sound if mindex does not change, and remains 512.
+        mindex = 512;
+        // initialize to zero for CapturePeak()
+        m = 0;
+
+        // Higher i means higher frequencies - I believe there are 26 bins
+        for (i = 0; i < 26; i++) {
+            // Include fft correction factor? You should research what the magnitude here represents. What are the units?
+            n = (float)myFFT.read(i); // 1.0 represents a full scale sine wave
+            
+            // send serial data to MATLAB
+            // Serial.print(n);
+            // Serial.print(" ");
+            
+            // Returns a number (mindex) representing fundamental frequency
+            CapturePeak();
+        }
+        
+        // for MATLAB
+        // Serial.println();
+        
+        // time the code (11.5 ms as of 1/10)
+        /*
+        if (timecount%2) {
+            time2 = millis();
+            Serial.print(time2-time1);
+            Serial.println();
+        }
+        time1 = millis();
+        timecount = timecount + 1;
+        */
+        
+
+        // Finds volume of signal
+        // vol = (float)myFFT.read(mindex);
+        // Prints out volume
+        // Serial.println(vol);
+
+        sendMIDIdata();
     }
-    
-    // for MATLAB
-    // Serial.println();
-    
-    // time the code (11.5 ms as of 1/10)
-    /*
-    if (timecount%2) {
-      time2 = millis();
-      Serial.print(time2-time1);
-      Serial.println();
-    }
-    time1 = millis();
-    timecount = timecount + 1;
-    */
-    
-
-    // Finds volume of signal
-    // vol = (float)myFFT.read(mindex);
-    // Prints out volume
-    // Serial.println(vol);
-
-    sendMIDIdata();
-  }
 }
 
 /////////////////////////////
 /////// VALVE READING ///////
 /////////////////////////////
 void ReadValves(){
-  // Check pot inputs
-  v1 = analogRead(16);
-  //Serial.print(v1);
-  //Serial.println(' ');
-  v2 = analogRead(14);
-  //Serial.print(v2);
-  //Serial.print(' ');
-  v3 = analogRead(17);
-  //Serial.println(v3);
+    // Check pot inputs
+    v1 = analogRead(16);
+    //Serial.print(v1);
+    //Serial.println(' ');
+    v2 = analogRead(14);
+    //Serial.print(v2);
+    //Serial.print(' ');
+    v3 = analogRead(17);
+    //Serial.println(v3);
 
-  // Assign valve variables booleans based on their state 
-  if (v1 < 512) {
-    valve1 = true;
-  } else {
-    valve1 = false;
-  }
-  if (v2 < 512) {
-    valve2 = true;
-  } else {
-    valve2 = false;
-  }
-  if (v3 < 512) {
-    valve3 = true;
-  } else {
-    valve3 = false;
-  }
+    // Assign valve variables booleans based on their state 
+    if (v1 < 512) {
+        valve1 = true;
+    } else {
+        valve1 = false;
+    }
+    if (v2 < 512) {
+        valve2 = true;
+    } else {
+        valve2 = false;
+    }
+    if (v3 < 512) {
+        valve3 = true;
+    } else {
+        valve3 = false;
+    }
 
-  // Combine all valve states into one number
-  combo = (valve1 << 2) + (valve2 << 1) + valve3;
+    // Combine all valve states into one number
+    combo = (valve1 << 2) + (valve2 << 1) + valve3;
 }
 
 /////////////////////////////
@@ -259,29 +259,29 @@ void ReadValves(){
 // This ensures that the fundmental is recorded, and not a harmonic.
 // Additionally, don't include very low frequencies because it is likely noise and not the intended pitch
 void CapturePeak(){
-    if (n > 0.07 && i > 4 && !peakstart && !endcapture) {
-      peakstart = true;
-      istart = i;
-      peakdetect = true;
-    }
-    if (n < 0.07 && i > 4 && peakstart && !endcapture) {
-      // uncomment if capturing more than one peak
-      // peakstart = false;
-      endcapture = true;
-      iend = i;
-      // find number of indexes in the peak
-      peaklength = iend - istart;
-      for (ipk = 0; ipk < peaklength; ipk++) {
-        if (myFFT.read(istart + ipk) > m) {
-          m = myFFT.read(ipk + istart);
-          mindex = ipk + istart;
+        if (n > 0.07 && i > 4 && !peakstart && !endcapture) {
+            peakstart = true;
+            istart = i;
+            peakdetect = true;
         }
-      }
-    }
-    // Set note = 0 if no peak was detected
-    if (mindex == 512) {
-      note = 0;
-    }
+        if (n < 0.07 && i > 4 && peakstart && !endcapture) {
+            // uncomment if capturing more than one peak
+            // peakstart = false;
+            endcapture = true;
+            iend = i;
+            // find number of indexes in the peak
+            peaklength = iend - istart;
+            for (ipk = 0; ipk < peaklength; ipk++) {
+                if (myFFT.read(istart + ipk) > m) {
+                    m = myFFT.read(ipk + istart);
+                    mindex = ipk + istart;
+                }
+            }
+        }
+        // Set note = 0 if no peak was detected
+        if (mindex == 512) {
+            note = 0;
+        }
 }
 
 /////////////////////////////
@@ -289,166 +289,166 @@ void CapturePeak(){
 /////////////////////////////
 
 void sendMIDIdata(){
-  
-  // Determine the note velocity
-  if (queue1.available() >= 8) {
-    for (i = 0; i < 8; i++) {
-      memcpy(audio + 128*i, queue1.readBuffer(), 256);
-      queue1.freeBuffer();
+
+    // Determine the note velocity
+    if (queue1.available() >= 8) {
+        for (i = 0; i < 8; i++) {
+            memcpy(audio + 128*i, queue1.readBuffer(), 256);
+            queue1.freeBuffer();
+        }
+        tot = 0;
+
+        for (i = 0; i < 1024; i++) {
+            // int64_t type required because tot would overload with just 32 bit
+            tot = ((int64_t)audio[i]*(int64_t)audio[i]) + tot;
+            // Moniter the mic signal in real time
+            // Serial.println(audio[i]);
+        }
+        rms = (int16_t)sqrt(tot/1024);
     }
-    tot = 0;
+    
+    // conversion to MIDI velocity value
+    // Full-scale sine wave has amplitude of 2^15, and the corresponding rms value is 23171.5
+    // velocity = rms*127/23171;
 
-    for (i = 0; i < 1024; i++) {
-      // int64_t type required because tot would overload with just 32 bit
-      tot = ((int64_t)audio[i]*(int64_t)audio[i]) + tot;
-      // Moniter the mic signal in real time
-      // Serial.println(audio[i]);
+    // Temporarily trying to find velocity with the peak FFT value instead, may be more reliable (And so it is!)
+    // Change denominator to current max FFT bin amplitude
+    // also acts as MIDI volume
+
+    velocity = m*127/0.6;
+
+    // Assign note based on mindex and valve combination
+    switch (combo) {
+        case 0:
+                if (mindex >= 2 && mindex <= 4) {
+                    note = 40; // E3
+                } else if (mindex >= 5 && mindex <= 6) {
+                    note = 47; // B3
+                } else if (mindex >= 7 && mindex <= 8) {
+                    note = 52; // E4
+                } else if (mindex >= 9 && mindex <= 10) {
+                    note = 56; // Ab4 (G#4)
+                } else if (mindex >= 11 && mindex <= 13) {
+                    note = 59; // B4
+                } else if (mindex >= 14 && mindex <= 20) {
+                    note = 64; // E5
+                }
+                break;
+        case 2:
+                if (mindex >= 2 && mindex <= 5) {
+                    note = 41; // F3
+                } else if (mindex >= 6 && mindex <= 7) {
+                    note = 48; // C4
+                } else if (mindex >= 8 && mindex <= 9) {
+                    note = 53; // F4
+                } else if (mindex >= 10 && mindex <= 11) {
+                    note = 57; // A4
+                } else if (mindex >= 12 && mindex <= 14) {
+                    note = 60; // C5
+                } else if (mindex >= 15 && mindex <= 20) {
+                    note = 65; // F5
+                }
+                break;
+        case 4:
+                if (mindex >= 2 && mindex <= 5) {
+                    note = 42; // Gb3
+                } else if (mindex >= 6 && mindex <= 7) {
+                    note = 49; // Db4
+                } else if (mindex >= 8 && mindex <= 9) {
+                    note = 54; // Gb4
+                } else if (mindex >= 10 && mindex <= 11) {
+                    note = 58; // Bb4
+                } else if (mindex >= 12 && mindex <= 14) {
+                    note = 61; // Db5
+                } else if (mindex >= 15 && mindex <= 20) {
+                    note = 66; // Gb5
+                }
+                break;
+        case 6:
+        case 1:
+                if (mindex >= 2 && mindex <= 5) {
+                    note = 43; // G3
+                } else if (mindex >= 6 && mindex <= 7) {
+                    note = 50; // D4
+                } else if (mindex >= 8 && mindex <= 10) {
+                    note = 55; // G4
+                } else if (mindex >= 11 && mindex <= 12) {
+                    note = 59; // B4
+                } else if (mindex >= 13 && mindex <= 15) {
+                    note = 62; // D5
+                } else if (mindex >= 16 && mindex <= 22) {
+                    note = 67; // G5
+                }
+                break;
+        case 3:
+                if (mindex >= 2 && mindex <= 5) {
+                    note = 44; // Ab3
+                } else if (mindex >= 6 && mindex <= 8) {
+                    note = 51; // Eb4
+                } else if (mindex >= 9 && mindex <= 10) {
+                    note = 56; // Ab4
+                } else if (mindex >= 11 && mindex <= 13) {
+                    note = 60; // C5
+                } else if (mindex >= 14 && mindex <= 16) {
+                    note = 63; // Eb5
+                } else if (mindex >= 17 && mindex <= 22) {
+                    note = 68; // Ab5
+                }
+                break;
+        case 5:
+                if (mindex >= 2 && mindex <= 6) {
+                    note = 45; // A3
+                } else if (mindex >= 7 && mindex <= 8) {
+                    note = 52; // E4
+                } else if (mindex >= 9 && mindex <= 11) {
+                    note = 57; // A4
+                } else if (mindex >= 12 && mindex <= 13) {
+                    note = 61; // Db5
+                } else if (mindex >= 14 && mindex <= 17) {
+                    note = 64; // E5
+                } else if (mindex >= 18 && mindex <= 22) {
+                    note = 69; // A5
+                }
+                break;
+        case 7:
+                if (mindex >= 2 && mindex <= 6) {
+                    note = 46; // Bb3
+                } else if (mindex >= 7 && mindex <= 9) {
+                    note = 53; // F4
+                } else if (mindex >= 10 && mindex <= 12) {
+                    note = 58; // Bb4
+                } else if (mindex >= 13 && mindex <= 14) {
+                    note = 62; // D5
+                } else if (mindex >= 15 && mindex <= 20) {
+                    note = 65; // F5
+                } else if (mindex >= 21 && mindex <= 22) {
+                    note = 70; // Bb5
+                }
+                break; 
     }
-    rms = (int16_t)sqrt(tot/1024);
-  }
-  
-  // conversion to MIDI velocity value
-  // Full-scale sine wave has amplitude of 2^15, and the corresponding rms value is 23171.5
-  // velocity = rms*127/23171;
 
-  // Temporarily trying to find velocity with the peak FFT value instead, may be more reliable (And so it is!)
-  // Change denominator to current max FFT bin amplitude
-  // also acts as MIDI volume
-
-  velocity = m*127/0.6;
-
-  // Assign note based on mindex and valve combination
-  switch (combo) {
-    case 0:
-        if (mindex >= 2 && mindex <= 4) {
-          note = 40; // E3
-        } else if (mindex >= 5 && mindex <= 6) {
-          note = 47; // B3
-        } else if (mindex >= 7 && mindex <= 8) {
-          note = 52; // E4
-        } else if (mindex >= 9 && mindex <= 10) {
-          note = 56; // Ab4 (G#4)
-        } else if (mindex >= 11 && mindex <= 13) {
-          note = 59; // B4
-        } else if (mindex >= 14 && mindex <= 20) {
-          note = 64; // E5
-        }
-        break;
-    case 2:
-        if (mindex >= 2 && mindex <= 5) {
-          note = 41; // F3
-        } else if (mindex >= 6 && mindex <= 7) {
-          note = 48; // C4
-        } else if (mindex >= 8 && mindex <= 9) {
-          note = 53; // F4
-        } else if (mindex >= 10 && mindex <= 11) {
-          note = 57; // A4
-        } else if (mindex >= 12 && mindex <= 14) {
-          note = 60; // C5
-        } else if (mindex >= 15 && mindex <= 20) {
-          note = 65; // F5
-        }
-        break;
-    case 4:
-        if (mindex >= 2 && mindex <= 5) {
-          note = 42; // Gb3
-        } else if (mindex >= 6 && mindex <= 7) {
-          note = 49; // Db4
-        } else if (mindex >= 8 && mindex <= 9) {
-          note = 54; // Gb4
-        } else if (mindex >= 10 && mindex <= 11) {
-          note = 58; // Bb4
-        } else if (mindex >= 12 && mindex <= 14) {
-          note = 61; // Db5
-        } else if (mindex >= 15 && mindex <= 20) {
-          note = 66; // Gb5
-        }
-        break;
-    case 6:
-    case 1:
-        if (mindex >= 2 && mindex <= 5) {
-          note = 43; // G3
-        } else if (mindex >= 6 && mindex <= 7) {
-          note = 50; // D4
-        } else if (mindex >= 8 && mindex <= 10) {
-          note = 55; // G4
-        } else if (mindex >= 11 && mindex <= 12) {
-          note = 59; // B4
-        } else if (mindex >= 13 && mindex <= 15) {
-          note = 62; // D5
-        } else if (mindex >= 16 && mindex <= 22) {
-          note = 67; // G5
-        }
-        break;
-    case 3:
-        if (mindex >= 2 && mindex <= 5) {
-          note = 44; // Ab3
-        } else if (mindex >= 6 && mindex <= 8) {
-          note = 51; // Eb4
-        } else if (mindex >= 9 && mindex <= 10) {
-          note = 56; // Ab4
-        } else if (mindex >= 11 && mindex <= 13) {
-          note = 60; // C5
-        } else if (mindex >= 14 && mindex <= 16) {
-          note = 63; // Eb5
-        } else if (mindex >= 17 && mindex <= 22) {
-          note = 68; // Ab5
-        }
-        break;
-    case 5:
-        if (mindex >= 2 && mindex <= 6) {
-          note = 45; // A3
-        } else if (mindex >= 7 && mindex <= 8) {
-          note = 52; // E4
-        } else if (mindex >= 9 && mindex <= 11) {
-          note = 57; // A4
-        } else if (mindex >= 12 && mindex <= 13) {
-          note = 61; // Db5
-        } else if (mindex >= 14 && mindex <= 17) {
-          note = 64; // E5
-        } else if (mindex >= 18 && mindex <= 22) {
-          note = 69; // A5
-        }
-        break;
-    case 7:
-        if (mindex >= 2 && mindex <= 6) {
-          note = 46; // Bb3
-        } else if (mindex >= 7 && mindex <= 9) {
-          note = 53; // F4
-        } else if (mindex >= 10 && mindex <= 12) {
-          note = 58; // Bb4
-        } else if (mindex >= 13 && mindex <= 14) {
-          note = 62; // D5
-        } else if (mindex >= 15 && mindex <= 20) {
-          note = 65; // F5
-        } else if (mindex >= 21 && mindex <= 22) {
-          note = 70; // Bb5
-        }
-        break; 
-  }
-
-  // Send volume signals whenever a peak is detected
-  if (peakdetect == true) {
-    usbMIDI.sendControlChange(07, velocity, channel);
-    // Serial.println(velocity);
-  }
-  
-  // Send note on/off data if the note has changed
-  if (note != noteold) {
-    // Only send note on message if a peak was detected and note !=0
-    // TODO: note != 0 part is probably a sloppy way of fixing a bug where playing a note about a high Bb triggers a very low note on (probably note 0)
-    if (peakdetect == true && note != 0) {
-      usbMIDI.sendNoteOn(note, velocity, channel);
-      //Serial.print("note on: ");
-      //Serial.println(note);
+    // Send volume signals whenever a peak is detected
+    if (peakdetect == true) {
+        usbMIDI.sendControlChange(07, velocity, channel);
+        // Serial.println(velocity);
     }
-    if (noteold != 0) {
-      usbMIDI.sendNoteOff(noteold, velocity, channel);
-      //Serial.print("note off: ");
-      //Serial.println(noteold);
-    }
-  }
 
-  // store note and valve information for next loop's comparisons
-  noteold = note;
+    // Send note on/off data if the note has changed
+    if (note != noteold) {
+        // Only send note on message if a peak was detected and note !=0
+        // TODO: note != 0 part is probably a sloppy way of fixing a bug where playing a note about a high Bb triggers a very low note on (probably note 0)
+        if (peakdetect == true && note != 0) {
+            usbMIDI.sendNoteOn(note, velocity, channel);
+            //Serial.print("note on: ");
+            //Serial.println(note);
+        }
+        if (noteold != 0) {
+            usbMIDI.sendNoteOff(noteold, velocity, channel);
+            //Serial.print("note off: ");
+            //Serial.println(noteold);
+        }
+    }
+
+    // store note and valve information for next loop's comparisons
+    noteold = note;
 }
