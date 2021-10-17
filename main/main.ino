@@ -1,5 +1,5 @@
 /*
-    COPYRIGHT 2017 DAVID BAYLIES
+    COPYRIGHT 2021 DAVID BAYLIES
     
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
