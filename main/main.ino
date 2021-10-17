@@ -29,35 +29,8 @@ AudioConnection          patchCord3(i2s1, 0, biquad1, 0);
 AudioConnection          patchCord4(biquad1, myFFT);
 AudioControlSGTL5000     sgtl5000;     //xy=1403,624
 
-
-/////////////////////////////
-//// MIDI SEND VARIABLES ////
-/////////////////////////////
-
-// previous MIDI note number - initialized to zero
+// memory for MIDI note number
 int noteold = 0;
-
-// current MIDI note number
-int note;
-
-// MIDI channel (constant)
-const int channel = 1;
-
-/////////////////////////////
-// PEAK CAPTURE VARIABLES ///
-/////////////////////////////
-
-// Bounds for detected peak range
-int istart, iend;
-
-// index of the bin of max frequency.
-int mindex;
-
-// float for storing and printing max fft result
-float m;
-
-// bool for remembering if a note was buzzed
-bool peakdetect;
 
 void setup() {
     Serial.begin(250000);
@@ -80,15 +53,14 @@ void setup() {
 
 // Main code loop
 void loop() {
+    // Initialize to a number that is unused. No note will sound if mindex does not change, and remains 512.
+    int mindex = 512;
     // once new buffer fills, run it through fft
     if (myFFT.available()) {
         bool endcapture = false;
-        bool peakstart = false;
-        peakdetect = false;
-        // Initialize to a number that is unused. In CapturePeak() no note will sound if mindex does not change, and remains 512.
-        mindex = 512;
-        // initialize to zero for CapturePeak()
-        m = 0;
+        bool peakdetect = false;
+
+        float m = 0;
 
         // find and store peak the value and index if it is loud and a lower frequency than the last recorded value.
         // This ensures that the fundmental is recorded, and not a harmonic.
@@ -97,18 +69,18 @@ void loop() {
         for (int i = 0; i < 26; i++) {
             // Include fft correction factor? You should research what the magnitude here represents. What are the units?
             float n = (float)myFFT.read(i); // 1.0 represents a full scale sine wave
-            
-            // Returns a number (mindex) representing fundamental frequency
-            if (n > 0.07 && i > 4 && !peakstart && !endcapture) {
-                peakstart = true;
-                istart = i;
+            int istart = 0;
+
+            // A peak has begun
+            if (n > 0.07 && i > 4 && !peakdetect && !endcapture) {
                 peakdetect = true;
+                istart = i;
             }
-            if (n < 0.07 && i > 4 && peakstart && !endcapture) {
-                // uncomment if capturing more than one peak
-                // peakstart = false;
+
+            // The peak has ended
+            if (n < 0.07 && i > 4 && peakdetect && !endcapture) {
                 endcapture = true;
-                iend = i;
+                int iend = i;
                 // find number of indexes in the peak
                 int peaklength = iend - istart;
                 for (int ipk = 0; ipk < peaklength; ipk++) {
@@ -118,14 +90,15 @@ void loop() {
                     }
                 }
             }
-            // Set note = 0 if no peak was detected
-            if (mindex == 512) {
-                note = 0;
-            }
         }
 
+        // Find velocity with the peak FFT value. Also acts as MIDI volume.
+        // TODO: Change denominator to current max FFT bin amplitude
+        int16_t velocity = m*127/0.6;
+
         int valveState = ReadValves();
-        sendMIDIdata(valveState);
+        int midiNote = determineMIDINote(valveState, mindex);
+        sendMIDIdata(midiNote, velocity, peakdetect);
     }
 }
 
@@ -141,145 +114,148 @@ int ReadValves(){
     return (valve1 << 2) + (valve2 << 1) + valve3;
 }
 
-void sendMIDIdata(int valveState){
-    // Find velocity with the peak FFT value. Also acts as MIDI volume.
-    // TODO: Change denominator to current max FFT bin amplitude
-    int16_t velocity = m*127/0.6;
-
-    // Assign note based on mindex and valve combination
+int determineMIDINote(int valveState, int fftIndex)
+{
+    int note = 0;
+    // Assign note based on fftIndex and valve combination
     switch (valveState) {
         case 0:
-                if (mindex >= 2 && mindex <= 4) {
+                if (fftIndex >= 2 && fftIndex <= 4) {
                     note = 40; // E3
-                } else if (mindex >= 5 && mindex <= 6) {
+                } else if (fftIndex >= 5 && fftIndex <= 6) {
                     note = 47; // B3
-                } else if (mindex >= 7 && mindex <= 8) {
+                } else if (fftIndex >= 7 && fftIndex <= 8) {
                     note = 52; // E4
-                } else if (mindex >= 9 && mindex <= 10) {
+                } else if (fftIndex >= 9 && fftIndex <= 10) {
                     note = 56; // Ab4 (G#4)
-                } else if (mindex >= 11 && mindex <= 13) {
+                } else if (fftIndex >= 11 && fftIndex <= 13) {
                     note = 59; // B4
-                } else if (mindex >= 14 && mindex <= 20) {
+                } else if (fftIndex >= 14 && fftIndex <= 20) {
                     note = 64; // E5
                 }
                 break;
         case 2:
-                if (mindex >= 2 && mindex <= 5) {
+                if (fftIndex >= 2 && fftIndex <= 5) {
                     note = 41; // F3
-                } else if (mindex >= 6 && mindex <= 7) {
+                } else if (fftIndex >= 6 && fftIndex <= 7) {
                     note = 48; // C4
-                } else if (mindex >= 8 && mindex <= 9) {
+                } else if (fftIndex >= 8 && fftIndex <= 9) {
                     note = 53; // F4
-                } else if (mindex >= 10 && mindex <= 11) {
+                } else if (fftIndex >= 10 && fftIndex <= 11) {
                     note = 57; // A4
-                } else if (mindex >= 12 && mindex <= 14) {
+                } else if (fftIndex >= 12 && fftIndex <= 14) {
                     note = 60; // C5
-                } else if (mindex >= 15 && mindex <= 20) {
+                } else if (fftIndex >= 15 && fftIndex <= 20) {
                     note = 65; // F5
                 }
                 break;
         case 4:
-                if (mindex >= 2 && mindex <= 5) {
+                if (fftIndex >= 2 && fftIndex <= 5) {
                     note = 42; // Gb3
-                } else if (mindex >= 6 && mindex <= 7) {
+                } else if (fftIndex >= 6 && fftIndex <= 7) {
                     note = 49; // Db4
-                } else if (mindex >= 8 && mindex <= 9) {
+                } else if (fftIndex >= 8 && fftIndex <= 9) {
                     note = 54; // Gb4
-                } else if (mindex >= 10 && mindex <= 11) {
+                } else if (fftIndex >= 10 && fftIndex <= 11) {
                     note = 58; // Bb4
-                } else if (mindex >= 12 && mindex <= 14) {
+                } else if (fftIndex >= 12 && fftIndex <= 14) {
                     note = 61; // Db5
-                } else if (mindex >= 15 && mindex <= 20) {
+                } else if (fftIndex >= 15 && fftIndex <= 20) {
                     note = 66; // Gb5
                 }
                 break;
         case 6:
         case 1:
-                if (mindex >= 2 && mindex <= 5) {
+                if (fftIndex >= 2 && fftIndex <= 5) {
                     note = 43; // G3
-                } else if (mindex >= 6 && mindex <= 7) {
+                } else if (fftIndex >= 6 && fftIndex <= 7) {
                     note = 50; // D4
-                } else if (mindex >= 8 && mindex <= 10) {
+                } else if (fftIndex >= 8 && fftIndex <= 10) {
                     note = 55; // G4
-                } else if (mindex >= 11 && mindex <= 12) {
+                } else if (fftIndex >= 11 && fftIndex <= 12) {
                     note = 59; // B4
-                } else if (mindex >= 13 && mindex <= 15) {
+                } else if (fftIndex >= 13 && fftIndex <= 15) {
                     note = 62; // D5
-                } else if (mindex >= 16 && mindex <= 22) {
+                } else if (fftIndex >= 16 && fftIndex <= 22) {
                     note = 67; // G5
                 }
                 break;
         case 3:
-                if (mindex >= 2 && mindex <= 5) {
+                if (fftIndex >= 2 && fftIndex <= 5) {
                     note = 44; // Ab3
-                } else if (mindex >= 6 && mindex <= 8) {
+                } else if (fftIndex >= 6 && fftIndex <= 8) {
                     note = 51; // Eb4
-                } else if (mindex >= 9 && mindex <= 10) {
+                } else if (fftIndex >= 9 && fftIndex <= 10) {
                     note = 56; // Ab4
-                } else if (mindex >= 11 && mindex <= 13) {
+                } else if (fftIndex >= 11 && fftIndex <= 13) {
                     note = 60; // C5
-                } else if (mindex >= 14 && mindex <= 16) {
+                } else if (fftIndex >= 14 && fftIndex <= 16) {
                     note = 63; // Eb5
-                } else if (mindex >= 17 && mindex <= 22) {
+                } else if (fftIndex >= 17 && fftIndex <= 22) {
                     note = 68; // Ab5
                 }
                 break;
         case 5:
-                if (mindex >= 2 && mindex <= 6) {
+                if (fftIndex >= 2 && fftIndex <= 6) {
                     note = 45; // A3
-                } else if (mindex >= 7 && mindex <= 8) {
+                } else if (fftIndex >= 7 && fftIndex <= 8) {
                     note = 52; // E4
-                } else if (mindex >= 9 && mindex <= 11) {
+                } else if (fftIndex >= 9 && fftIndex <= 11) {
                     note = 57; // A4
-                } else if (mindex >= 12 && mindex <= 13) {
+                } else if (fftIndex >= 12 && fftIndex <= 13) {
                     note = 61; // Db5
-                } else if (mindex >= 14 && mindex <= 17) {
+                } else if (fftIndex >= 14 && fftIndex <= 17) {
                     note = 64; // E5
-                } else if (mindex >= 18 && mindex <= 22) {
+                } else if (fftIndex >= 18 && fftIndex <= 22) {
                     note = 69; // A5
                 }
                 break;
         case 7:
-                if (mindex >= 2 && mindex <= 6) {
+                if (fftIndex >= 2 && fftIndex <= 6) {
                     note = 46; // Bb3
-                } else if (mindex >= 7 && mindex <= 9) {
+                } else if (fftIndex >= 7 && fftIndex <= 9) {
                     note = 53; // F4
-                } else if (mindex >= 10 && mindex <= 12) {
+                } else if (fftIndex >= 10 && fftIndex <= 12) {
                     note = 58; // Bb4
-                } else if (mindex >= 13 && mindex <= 14) {
+                } else if (fftIndex >= 13 && fftIndex <= 14) {
                     note = 62; // D5
-                } else if (mindex >= 15 && mindex <= 20) {
+                } else if (fftIndex >= 15 && fftIndex <= 20) {
                     note = 65; // F5
-                } else if (mindex >= 21 && mindex <= 22) {
+                } else if (fftIndex >= 21 && fftIndex <= 22) {
                     note = 70; // Bb5
                 }
-                break; 
-        default:
-            note = 0;
+                break;
     }
+
+    return note;
+}
+
+
+void sendMIDIdata(int noteNumber, int16_t velocity, bool peakdetect){
+    const int midiChannel = 1;
 
     // Send volume signals whenever a peak is detected
     if (peakdetect == true) {
-        usbMIDI.sendControlChange(07, velocity, channel);
+        usbMIDI.sendControlChange(07, velocity, midiChannel);
         // Serial.println(velocity);
     }
 
     // Send note on/off data if the note has changed
-    if (note != noteold) {
+    if (noteNumber != noteold) {
         // Only send note on message if a peak was detected and note !=0
         // TODO: note != 0 part is probably a sloppy way of fixing a bug where playing a note about a high Bb triggers a very low note on (probably note 0)
-        if (peakdetect == true && note != 0) {
-            usbMIDI.sendNoteOn(note, velocity, channel);
+        if (peakdetect == true && noteNumber != 0) {
+            usbMIDI.sendNoteOn(noteNumber, velocity, midiChannel);
             //Serial.print("note on: ");
             //Serial.println(note);
         }
         if (noteold != 0) {
-            usbMIDI.sendNoteOff(noteold, velocity, channel);
+            usbMIDI.sendNoteOff(noteold, velocity, midiChannel);
             //Serial.print("note off: ");
             //Serial.println(noteold);
         }
     }
 
     // store note and valve information for next loop's comparisons
-    noteold = note;
+    noteold = noteNumber;
 }
