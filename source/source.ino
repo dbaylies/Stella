@@ -35,8 +35,8 @@ int noteold = 0;
 
 struct PeakInfo
 {
-  int mindex; // FFT bin of peak
-  float m;    // FFT amplitude of peak
+  int mindex;   // FFT bin of peak
+  float m;      // FFT amplitude of peak
 };
 
 void setup() 
@@ -65,12 +65,82 @@ void loop()
   if (myFFT.available()) 
   {
     // Returns a number (mindex) representing fundamental frequency, as well as that bin's amplitude
-    PeakInfo peakInfo = CapturePeak();
+    PeakInfo peakInfo;
+    bool peakDetected = CapturePeak(peakInfo);
 
     int note = getNote(ReadValves(), peakInfo.mindex);
-    int16_t velocity = getVelocity(peakInfo.m);
-    sendMIDIdata(note, velocity);
+    int16_t volume = getVolume(peakInfo.m);
+    
+    constexpr int channel = 1;
+    // Send volume signals whenever a peak is detected
+    if (peakDetected)
+      usbMIDI.sendControlChange(07, volume, channel);
+    
+    // Send note on/off data if the note has changed
+    if (note != noteold) 
+    {
+      // Only send note on message if a peak was detected
+      if (peakDetected)
+        usbMIDI.sendNoteOn(note, volume, channel);
+
+      if (noteold != 0)
+        usbMIDI.sendNoteOff(noteold, 0, channel);
+
+      // store note and valve information for next loop's comparisons
+      noteold = note;
+    }
   }
+}
+
+// find and store peak the value and index if it is loud and a lower frequency than the last recorded value.
+// This ensures that the fundmental is recorded, and not a harmonic.
+// Additionally, don't include very low frequencies because it is likely noise and not the intended pitch
+bool CapturePeak(PeakInfo& peakInfo)
+{
+  // Initialize to a number that is unused. No note will sound if mindex does not change, and remains 512.
+  int mindex = 512;
+  float m = 0;
+  int istart = 0;
+  int iend = 0;
+
+  bool peakDetect = false;
+  bool endcapture = false;
+  bool peakstart = false;
+
+  // Higher i means higher frequencies - I believe there are 26 bins
+  for (int i = 0; i < 26; i++)
+  {   
+    // Include fft correction factor? You should research what the magnitude here represents. What are the units?
+    float n = myFFT.read(i); // 1.0 represents a full scale sine wave
+
+    if (n > 0.07 && i > 4 && !peakstart && !endcapture) 
+    {
+      peakstart = true;
+      istart = i;
+      peakDetect = true;
+    }
+
+    if (n < 0.07 && i > 4 && peakstart && !endcapture) 
+    {
+      endcapture = true;
+      iend = i;
+      // find number of indexes in the peak
+      int peaklength = iend - istart;
+      for (int ipk = 0; ipk < peaklength; ipk++) 
+      {
+        if (myFFT.read(istart + ipk) > m) 
+        {
+          m = myFFT.read(ipk + istart);
+          mindex = ipk + istart;
+        }
+      }
+    }
+  }
+
+  peakInfo.mindex = mindex;
+  peakInfo.m = m;
+
+  return peakDetect;
 }
 
 int ReadValves()
@@ -81,81 +151,12 @@ int ReadValves()
   bool valve3 = analogRead(17) < 512;
 
   // Combine all valve states into one number
-  return (valve1 << 2) + (valve2 << 1) + valve3;
+  return {(valve1 << 2) + (valve2 << 1) + valve3};
 }
 
-// find and store peak the value and index if it is loud and a lower frequency than the last recorded value.
-// This ensures that the fundmental is recorded, and not a harmonic.
-// Additionally, don't include very low frequencies because it is likely noise and not the intended pitch
-PeakInfo CapturePeak()
+int16_t getVolume(float m)
 {
-    // Initialize to a number that is unused. No note will sound if mindex does not change, and remains 512.
-    int mindex = 512;
-    float m = 0;
-    int istart = 0;
-    int iend = 0;
-
-    bool endcapture = false;
-    bool peakstart = false;
-
-    // Higher i means higher frequencies - I believe there are 26 bins
-    for (int i = 0; i < 26; i++)
-    {   
-      // Include fft correction factor? You should research what the magnitude here represents. What are the units?
-      float n = myFFT.read(i); // 1.0 represents a full scale sine wave
-
-      if (n > 0.07 && i > 4 && !peakstart && !endcapture) 
-      {
-        peakstart = true;
-        istart = i;
-      }
-
-      if (n < 0.07 && i > 4 && peakstart && !endcapture) 
-      {
-        endcapture = true;
-        iend = i;
-        // find number of indexes in the peak
-        int peaklength = iend - istart;
-        for (int ipk = 0; ipk < peaklength; ipk++) 
-        {
-          if (myFFT.read(istart + ipk) > m) 
-          {
-            m = myFFT.read(ipk + istart);
-            mindex = ipk + istart;
-          }
-        }
-      }
-    }
-
-    return {mindex, m};
-}
-
-void sendMIDIdata(int note, int16_t velocity)
-{  
-  bool peakDetected = note != 0;
-
-  constexpr int channel = 1;
-  // Send volume signals whenever a peak is detected
-  if (peakDetected)
-    usbMIDI.sendControlChange(07, velocity, channel);
-  
-  // Send note on/off data if the note has changed
-  if (note != noteold) 
-  {
-    // Only send note on message if a peak was detected
-    if (peakDetected)
-      usbMIDI.sendNoteOn(note, velocity, channel);
-    if (noteold != 0)
-      usbMIDI.sendNoteOff(noteold, velocity, channel);
-  }
-
-  // store note and valve information for next loop's comparisons
-  noteold = note;
-}
-
-int16_t getVelocity(float m)
-{
-  // Find velocity with the peak FFT value
+  // Find volume with the peak FFT value
   // TODO: Change denominator to current max FFT bin amplitude
   // also acts as MIDI volume
   return m * 127 / 0.6;
