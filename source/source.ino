@@ -26,10 +26,6 @@ AudioConnection          patchCord1(i2s1, 0, biquad1, 0);
 AudioConnection          patchCord2(biquad1, myFFT);
 AudioControlSGTL5000     sgtl5000;          //xy=1403,624
 
-/////////////////////////////
-//// MIDI SEND VARIABLES ////
-/////////////////////////////
-
 // previous MIDI note number - initialized to zero
 int noteold = 0;
 
