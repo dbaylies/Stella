@@ -33,18 +33,11 @@ AudioControlSGTL5000     sgtl5000;          //xy=1403,624
 // previous MIDI note number - initialized to zero
 int noteold = 0;
 
-// current MIDI note number
-int note;
-
 struct PeakInfo
 {
   int mindex; // FFT bin of peak
   float m;    // FFT amplitude of peak
 };
-
-/////////////////////////////
-///////// CODE SETUP ////////
-/////////////////////////////
 
 void setup() 
 {
@@ -64,12 +57,7 @@ void setup()
   
   // Configure the FFT window algorithm to use
   myFFT.windowFunction(AudioWindowHanning1024);
-
 }
-
-/////////////////////////////
-///////// MAIN CODE /////////
-/////////////////////////////
 
 void loop() 
 {  
@@ -79,14 +67,12 @@ void loop()
     // Returns a number (mindex) representing fundamental frequency, as well as that bin's amplitude
     PeakInfo peakInfo = CapturePeak();
 
-    bool peakdetect = peakInfo.mindex != 512;
-    sendMIDIdata(peakInfo.mindex, peakInfo.m, peakdetect);
+    int note = getNote(ReadValves(), peakInfo.mindex);
+    int16_t velocity = getVelocity(peakInfo.m);
+    sendMIDIdata(note, velocity);
   }
 }
 
-/////////////////////////////
-/////// VALVE READING ///////
-/////////////////////////////
 int ReadValves()
 {
   // Assign valve variables booleans based on the valve states 
@@ -98,9 +84,6 @@ int ReadValves()
   return (valve1 << 2) + (valve2 << 1) + valve3;
 }
 
-/////////////////////////////
-///// FFT PEAK CAPTURE //////
-/////////////////////////////
 // find and store peak the value and index if it is loud and a lower frequency than the last recorded value.
 // This ensures that the fundmental is recorded, and not a harmonic.
 // Additionally, don't include very low frequencies because it is likely noise and not the intended pitch
@@ -147,19 +130,39 @@ PeakInfo CapturePeak()
     return {mindex, m};
 }
 
-/////////////////////////////
-////////// MIDI SEND ////////
-/////////////////////////////
-
-void sendMIDIdata(int mindex, float m, bool peakdetect)
+void sendMIDIdata(int note, int16_t velocity)
 {  
+  bool peakDetected = note != 0;
+
+  constexpr int channel = 1;
+  // Send volume signals whenever a peak is detected
+  if (peakDetected)
+    usbMIDI.sendControlChange(07, velocity, channel);
+  
+  // Send note on/off data if the note has changed
+  if (note != noteold) 
+  {
+    // Only send note on message if a peak was detected
+    if (peakDetected)
+      usbMIDI.sendNoteOn(note, velocity, channel);
+    if (noteold != 0)
+      usbMIDI.sendNoteOff(noteold, velocity, channel);
+  }
+
+  // store note and valve information for next loop's comparisons
+  noteold = note;
+}
+
+int16_t getVelocity(float m)
+{
   // Find velocity with the peak FFT value
   // TODO: Change denominator to current max FFT bin amplitude
   // also acts as MIDI volume
+  return m * 127 / 0.6;
+}
 
-  int16_t velocity = m * 127 / 0.6;
-
-  int combo = ReadValves();
+int getNote(int combo, int mindex)
+{
   int note = 0;
   // Assign note based on mindex and valve combination
   switch (combo) 
@@ -272,23 +275,5 @@ void sendMIDIdata(int mindex, float m, bool peakdetect)
         break; 
   }
 
-  constexpr int channel = 1;
-
-  // Send volume signals whenever a peak is detected
-  if (peakdetect == true)
-    usbMIDI.sendControlChange(07, velocity, channel);
-  
-  // Send note on/off data if the note has changed
-  if (note != noteold) 
-  {
-    // Only send note on message if a peak was detected and note !=0
-    // TODO: note != 0 part is probably a sloppy way of fixing a bug where playing a note about a high Bb triggers a very low note on (probably note 0)
-    if (peakdetect == true && note != 0)
-      usbMIDI.sendNoteOn(note, velocity, channel);
-    if (noteold != 0)
-      usbMIDI.sendNoteOff(noteold, velocity, channel);
-  }
-
-  // store note and valve information for next loop's comparisons
-  noteold = note;
+  return note;
 }
